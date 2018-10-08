@@ -10,20 +10,27 @@ class Npc
   attr_accessor :variable
 
   def initialize(name,race)
+
+    @player_stats = {str: 5,con: 50,dex: 5,int: 5}
+
     iguani_stats = {str: 3,con: 4,dex: 3,int: 2}
     human_stats = {str: 5,con: 5,dex: 5,int: 5}
     elf_stats = {str: 3,con: 4,dex: 6,int: 7}
     dwarf_stats = {str: 6,con: 7,dex: 3,int: 4}
 
     enemy_names = ["ba","da","ma","pa","ta","for","dor","mor","kor","vor","mek","dek","pek","gek","tek","tum","rum","pum","vum","xun"]
-    dwarf_prefix = ["Iron","Steel","Bronze","Magma","Storm","Mountain","Stone","Obsidian","Grey","Strong","Fire","Elder"]
-    dwarf_suffix = ["Hammer","Forge","Hearth","Mountain","Killer","Shield","Hand","Belly","Smasher","King","Axe"]
-    if name != "Mage"
-      @name = ((enemy_names.sample) + (enemy_names.sample)).capitalize
-      else
-      @name = name
-    end
+      dwarf_prefix = ["Iron","Steel","Bronze","Magma","Storm","Mountain","Stone","Obsidian","Grey","Strong","Fire","Elder"]
+      dwarf_suffix = ["Hammer","Forge","Hearth","Mountain","Killer","Shield","Hand","Belly","Beard","Smasher","King","Axe"]
+      elf_prefix = ["ael","aef","al","ari","bael","cal","cor","el","fera","gar","keth","kor","lam","lue","mai","rua","mara","se","sol",
+      "tha","tho","vil"]
+      elf_suffix = ["ae","ael","aer","al","el","avel","nis","nal","lon","lyn","or","reth","ran","deth","dre","dul","emar","fel","in",
+      "im","kash","lian","yth","zair"]
+      human_firstname = ["Adam","Bernarnd","Cornelius","Darius","Egon","Felix","Giddeon","Huri","Humberto","Ike","Jugan","Kyle","Thomas","William","Hugh"]
+      human_lastname = ["Anderson","Smith","Johnson","Williams","Brown","Jones","Davis","Carpenter","Lee","Walker","Nelson","Adams","Turner","Phillips","Rogers","Cook","Mann"]
+
+    @level = 1
     @race = race
+
     if race == "Iguani"
       @name = ((enemy_names.sample) + (enemy_names.sample)).capitalize
       @str = iguani_stats[:str]
@@ -31,11 +38,13 @@ class Npc
       @dex = iguani_stats[:dex]
       @int = iguani_stats[:int]
       elsif race == "Human"
+      @name = ((human_firstname.sample) + " " + (human_lastname.sample))
       @str = human_stats[:str]
       @con = human_stats[:con]
       @dex = human_stats[:dex]
       @int = human_stats[:int]
       elsif race == "Elf"
+      @name = ((elf_prefix.sample) + "'" + (elf_suffix.sample) + (elf_suffix.sample)).capitalize
       @str = elf_stats[:str]
       @con = elf_stats[:con]
       @dex = elf_stats[:dex]
@@ -47,8 +56,16 @@ class Npc
       @dex = dwarf_stats[:dex]
       @int = dwarf_stats[:int]
     end
-    statSet
+    if name == "Mage"
+      @name = name
+      @str = @player_stats[:str]
+      @con = @player_stats[:con]
+      @dex = @player_stats[:dex]
+      @int = @player_stats[:int]
+    end
 
+    statSet
+    $experience = 0
     @dead = false
     @items = Array.new
   end
@@ -56,10 +73,7 @@ class Npc
   def statSet
     @maxHealth = @con * 10
     @curHealth = @maxHealth
-
   end
-
-
 
   def about
     puts "Name: #{@name}"
@@ -67,8 +81,43 @@ class Npc
     puts "Health: #{@curHealth}/#{@maxHealth}"
   end
 
-  def dealDamage
-    @str
+  def strengthAttack(target)
+    #crit is the person attacking's dex mod
+    crit = instance_variable_get(:@dex)
+    #dodge is the receiving target's dex mod being subtracted from the hit chance
+    dodge = target.instance_variable_get(:@dex)
+    chance = rand(1..100)
+    puts "enemy crit:#{crit}"
+    puts "your dodge:#{dodge}"
+    puts "#{chance} - #{dodge} = #{chance-dodge}"
+    if chance < (10 + dodge)
+      puts "#{@name} missed"
+    elsif chance > (10 + dodge) && chance < (90 - crit)
+      dmgFloor = ((@str) /2).floor
+      dmgCeil = (@str) *2
+      target.takeDamage(rand(dmgFloor..dmgCeil))
+    elsif chance >= (90 - crit)
+      puts "Crit!"
+      crit = (@str) * 3
+      target.takeDamage(crit)
+    end
+  end
+
+  def magicAttack(target)
+    dodge = target.instance_variable_get(:@dex)
+    chance = rand(1..100)
+    puts "#{chance} - #{dodge} = #{chance-dodge}"
+    if chance < (10 + dodge)
+      puts "#{@name} missed"
+    elsif chance > (10 + dodge) && chance < 90
+      dmgFloor = ((@int) /2).floor
+      dmgCeil = (@int) *2
+      target.takeDamage(rand(dmgFloor..dmgCeil))
+    elsif chance >= 90
+      puts "Crit!"
+      crit = (@int) * 3
+      target.takeDamage(crit)
+    end
   end
 
   def takeDamage(dmg)
@@ -77,22 +126,74 @@ class Npc
       @curHealth = 0
     else
       @curHealth -= dmg
-      puts "#{@name} took #{dmg} damage. #{@curHealth}HP left"
+      puts "#{@name} took #{dmg} damage. HP:#{@curHealth}/#{@maxHealth}"
     end
   end
 
   def healDamage(heal)
     if (@curHealth + heal.to_i) >= @maxHealth
+      clear
       @curHealth = @maxHealth
-      puts "#{@name} healed #{heal} health"
+      puts "#{@name} healed #{heal}. HP:#{@curHealth}/#{@maxHealth}"
     else
+      clear
       @curHealth += heal.to_i
-      puts "#{@name} healed #{heal} health"
+      puts "#{@name} healed #{heal}. HP:#{@curHealth}/#{@maxHealth}"
     end
   end
 
   def health
     @curHealth
+  end
+
+  def buffStat(stat,magnitude)
+    clear
+    if stat == "str"
+      @str += magnitude
+      puts "Strength increased by #{magnitude}"
+    elsif stat == "con"
+      @curHealth += magnitude
+      @maxHealth += magnitude
+      puts "Constitution increased by #{magnitude}"
+    elsif stat == "dex"
+      @dex += magnitude
+      puts "Dexterity increased by #{magnitude}"
+    elsif stat == "int"
+      @int += magnitude
+      puts "intelligence increased by #{magnitude}"
+    else
+      puts "Stat error"
+    end
+  end
+
+  def increaseStat(stat,amount)
+    if stat == "str"
+      @player_stats[:str] += amount
+      puts "Strength increased by #{amount}"
+    elsif stat == "con"
+      @player_stats[:con] += amount
+      puts "Constitution increased by #{amount}"
+    elsif stat == "dex"
+      @player_stats[:dex] += amount
+      puts "Dexterity increased by #{amount}"
+    elsif stat == "int"
+      @player_stats[:int] += amount
+      puts "intelligence increased by #{amount}"
+    else
+      puts "Stat error"
+    end
+  end
+
+  def resetStats
+    @str = @player_stats[:str]
+    @con = @player_stats[:con]
+    @dex = @player_stats[:dex]
+    @int = @player_stats[:int]
+    # puts "#{@str}"
+    # puts "#{@dex}"
+    # puts "#{@con}"
+    # puts "#{@int}"
+    # puts "#{$experience} exp"
   end
 
   def isDead
@@ -110,7 +211,7 @@ class Character < Npc
   def castSpell(targets)
     clear
     #2
-    if targets.encArray.empty? == false
+    if targets.allDead == false
       #3
       loop do
         puts "Who do you want to cast a spell at?"
@@ -126,12 +227,14 @@ class Character < Npc
           else
             #6
             if selection[target].health > 0
-              selection[target].takeDamage(rand(5..10))
+              clear
+              magicAttack(selection[target])
               break
             else
               #If your selection within the encounter has zero health then it dies
               #The encounter class has removeEnemy method and targets is the encounter
               targets.removeEnemy(selection[target])
+              giveExp(10)
               break
               end#6
             end#5
@@ -143,22 +246,22 @@ class Character < Npc
       end#2
   end#1
 
-  def addItem(item)
-    @items << item
+  def addItem(amount,type,mag)
+    amount.times do
+      @items << Item.new("item",type,mag)
+    end
   end
-
   def removeItem(item)
-    clear
-    puts "#{item.name} used"
     @items.slice!(@items.index(item))
   end
 
   def itemEffect(item)
-    if item.isHeal == true
+    if item.typeCheck == "heal"
       healDamage(item.magSet)
+    else
+      buffStat(item.typeCheck,item.magSet)
     end
   end
-
   #1
   def useItem
     #2
@@ -183,6 +286,14 @@ class Character < Npc
       end#3
     end#2
   end#1
+
+  def levelUp
+    if $experience  >= (@level * 100)
+      @level += 1
+      $experience = 0
+      puts "Level up! You are now level #{@level}"
+    end
+  end
 
   def noItems
     if @items.empty? == true
@@ -210,6 +321,7 @@ class Encounter
     @enemies.each do |i|
       if enemy.isDead == true
         @enemies.delete(enemy)
+        $experience += 25
       end
     end
   end
@@ -227,47 +339,80 @@ class Encounter
     end
   end
 
-  def enemyAttack(target)
+  def allDead
+    if @enemies.empty? == true
+      true
+    else
+      false
+    end
+  end
 
+  def enemyAttack(target)
     removeDead
     @enemies.each_with_index do |i, c|
-      dmgFloor = ((i.dealDamage) /2).floor
-      dmgCeil = (i.dealDamage) *2
+      dmgFloor = ((i.instance_variable_get(:@str)) /2).floor
+      dmgCeil = (i.instance_variable_get(:@str)) *2
       puts "#{i.name} attacks!"
-      target.takeDamage(rand(dmgFloor..dmgCeil))
+      i.strengthAttack(target)
       puts
     end
   end
 
-  def encArray
-    #This method is used within charachter to check if it is empty
-    @enemies
-  end
 end
 class Item
   attr_reader :name
+  attr_accessor :variable
 
-  def initialize(name,heal,buff,magnitude)
+  def initialize(name,type,magnitude)
     @name = name
-    @heal = heal
-    @buff = buff
+    @type = type
     @magnitude = magnitude
+
+    if type == "heal" && magnitude == 1
+      @name = "Lesser health potion"
+      elsif type == "heal" && magnitude == 2
+      @name = "Health potion"
+      elsif type == "heal" && magnitude == 3
+      @name = "Greater health potion"
+    end
+
+    if type == "str" && magnitude == 1
+      @name = "Lesser potion of strength"
+    elsif type == "str" && magnitude == 2
+      @name = "Potion of strength"
+    elsif type == "str" && magnitude == 3
+      @name = "Greater potion of strength"
+    end
+
+    if type == "con" && magnitude == 1
+      @name = "Lesser potion of constitution"
+    elsif type == "con" && magnitude == 2
+      @name = "Potion of constitution"
+    elsif type == "con" && magnitude == 3
+      @name = "Greater potion of constitution"
+    end
+
+    if type == "dex" && magnitude == 1
+      @name = "Lesser potion of dexterity"
+    elsif type == "dex" && magnitude == 2
+      @name = "Potion of dexterity"
+    elsif type == "dex" && magnitude == 3
+      @name = "Greater potion of dexterity"
+    end
+
+    if type == "int" && magnitude == 1
+      @name = "Lesser potion of intelligence"
+    elsif type == "int" && magnitude == 2
+      @name = "Potion of intelligence"
+    elsif type == "int" && magnitude == 3
+      @name = "Greater potion of intelligence"
+    end
   end
 
-  def isHeal
-    if @heal == true
-      true
-    else
-      false
-    end
+  def typeCheck
+    @type = @type
   end
-  def isBuff
-    if @buff == true
-      true
-    else
-      false
-    end
-  end
+
   def magSet
     if @magnitude == 1
       @magnitude = 5
@@ -284,6 +429,10 @@ def combat(player,enemies)
   player_turn = true
   #2
   loop do
+    if enemies.allDead == true
+      puts "You win"
+      break
+    else
     #3
     if player.health > 0
       #4
@@ -308,7 +457,7 @@ def combat(player,enemies)
           clear
           puts "Choose a valid option"
         end #5
-      else
+      elsif player_turn == false
         #Enemy turn
         puts
         puts "Enemy turn"
@@ -319,36 +468,46 @@ def combat(player,enemies)
     else
       puts "You are dead"
       break
+    end
     end #3
   end #2
+  player.levelUp
+  player.resetStats
 end #1
 
 clear
 mage = Character.new("Mage","Human")
 
-health_pot1 = Item.new("Lesser health potion",true,false,1)
-health_pot2 = Item.new("Health potion",true,false,2)
-health_pot3 = Item.new("Greater health potion",true,false,3)
-
-
 enc1 = Encounter.new("Group of Iguani")
+enc2 = Encounter.new("Group of Dwarves")
 
 #parameters are (amount,racename)
-enc1.addEnemy(2,"Iguani")
-enc1.addEnemy(2,"Dwarf")
+enc1.addEnemy(1,"Iguani")
+enc1.addEnemy(1,"Dwarf")
+enc1.addEnemy(1,"Elf")
+# enc1.addEnemy(1,"Human")
 
-# enc1.addEnemy(warrior2)
-# enc1.addEnemy(warrior3)
-# enc1.addEnemy(warrior4)
+enc2.addEnemy(2,"Dwarf")
+
+mage.addItem(6,"heal",3)
+mage.addItem(2,"str",3)
+mage.addItem(2,"con",3)
+mage.addItem(2,"dex",3)
+mage.addItem(2,"int",3)
 
 
-mage.addItem(health_pot1)
-mage.addItem(health_pot1)
-mage.addItem(health_pot2)
-mage.addItem(health_pot3)
+# mage.addItem(int_pot1)
+# mage.addItem(int_pot1)
+# mage.addItem(dex_pot1)
+# mage.addItem(con_pot1)
+# mage.addItem(str_pot1)
+# mage.addItem(health_pot2)
+# mage.addItem(health_pot3)
+
+
 
 combat(mage,enc1)
-
+combat(mage,enc2)
 
 # warrior1 = Character.new("warrior1","Dwarf",50,45)
 # warrior1.about
