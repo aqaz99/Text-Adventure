@@ -66,8 +66,11 @@ class Npc
 
     statSet
     $experience = 0
+    @skill_points = 0
     @dead = false
-    @items = Array.new
+    @inventory = Array.new
+    @loot = Array.new
+    @armor = {head: [],ring: [],chest: [],hands: [], legs: [],feet: []}
   end
 
   def statSet
@@ -79,6 +82,10 @@ class Npc
     puts "Name: #{@name}"
     puts "Race: #{@race}"
     puts "Health: #{@curHealth}/#{@maxHealth}"
+    puts "Strength: #{@str}"
+    puts "Constitution: #{@con}"
+    puts "Dexterity: #{@dex}"
+    puts "Intelligence: #{@int}"
   end
 
   def strengthAttack(target)
@@ -87,9 +94,9 @@ class Npc
     #dodge is the receiving target's dex mod being subtracted from the hit chance
     dodge = target.instance_variable_get(:@dex)
     chance = rand(1..100)
-    puts "enemy crit:#{crit}"
-    puts "your dodge:#{dodge}"
-    puts "#{chance} - #{dodge} = #{chance-dodge}"
+    # puts "enemy crit:#{crit}"
+    # puts "your dodge:#{dodge}"
+    # puts "#{chance} - #{dodge} = #{chance-dodge}"
     if chance < (10 + dodge)
       puts "#{@name} missed"
     elsif chance > (10 + dodge) && chance < (90 - crit)
@@ -106,7 +113,7 @@ class Npc
   def magicAttack(target)
     dodge = target.instance_variable_get(:@dex)
     chance = rand(1..100)
-    puts "#{chance} - #{dodge} = #{chance-dodge}"
+    # puts "#{chance} - #{dodge} = #{chance-dodge}"
     if chance < (10 + dodge)
       puts "#{@name} missed"
     elsif chance > (10 + dodge) && chance < 90
@@ -146,39 +153,73 @@ class Npc
     @curHealth
   end
 
-  def buffStat(stat,magnitude)
-    clear
+  def buffStat(stat,magnitude,output = true)
+    # clear
     if stat == "str"
       @str += magnitude
-      puts "Strength increased by #{magnitude}"
+      if output
+        puts "Strength increased by #{magnitude}, it is now #{@str}"
+      end
     elsif stat == "con"
-      @curHealth += magnitude
-      @maxHealth += magnitude
-      puts "Constitution increased by #{magnitude}"
+      @curHealth += (magnitude * 3)
+      @maxHealth += (magnitude * 3)
+      if output
+        puts "Constitution increased by #{magnitude * 3}, max health is now #{@maxHealth}"
+      end
     elsif stat == "dex"
       @dex += magnitude
-      puts "Dexterity increased by #{magnitude}"
+      if output
+        puts "Dexterity increased by #{magnitude}, it is now #{@dex}"
+      end
     elsif stat == "int"
       @int += magnitude
-      puts "intelligence increased by #{magnitude}"
+      if output
+        puts "Intelligence increased by #{magnitude}, it is now #{@int}"
+      end
     else
       puts "Stat error"
     end
   end
 
+  def applyBuffs (output = true)
+    if @armor[:head].length > 0
+      buffStat(@armor[:head][0].typeCheck,@armor[:head][0].instance_variable_get(:@lvl), output)
+    end
+    if @armor[:ring].length > 0
+      buffStat(@armor[:ring][0].typeCheck,@armor[:ring][0].instance_variable_get(:@lvl), output)
+    end
+    if @armor[:chest].length > 0
+      buffStat(@armor[:chest][0].typeCheck,@armor[:chest][0].instance_variable_get(:@lvl), output)
+    end
+    if @armor[:hands].length > 0
+      buffStat(@armor[:hands][0].typeCheck,@armor[:hands][0].instance_variable_get(:@lvl), output)
+    end
+    if @armor[:legs].length > 0
+      buffStat(@armor[:legs][0].typeCheck,@armor[:legs][0].instance_variable_get(:@lvl), output)
+    end
+    if @armor[:feet].length > 0
+      buffStat(@armor[:feet][0].typeCheck,@armor[:feet][0].instance_variable_get(:@lvl), output)
+    end
+  end
+
   def increaseStat(stat,amount)
+    #This method is for increasing the baseline of the players stats, not for armor or potions
     if stat == "str"
       @player_stats[:str] += amount
-      puts "Strength increased by #{amount}"
+      resetStats
+      puts "Strength increased by #{amount}, it is now #{@str}"
     elsif stat == "con"
       @player_stats[:con] += amount
-      puts "Constitution increased by #{amount}"
+      resetStats
+      puts "Constitution increased by #{amount}, it is now #{@con}"
     elsif stat == "dex"
       @player_stats[:dex] += amount
-      puts "Dexterity increased by #{amount}"
+      resetStats
+      puts "Dexterity increased by #{amount}, it is now #{@dex}"
     elsif stat == "int"
       @player_stats[:int] += amount
-      puts "intelligence increased by #{amount}"
+      resetStats
+      puts "Intelligence increased by #{amount}, it is now #{@int}"
     else
       puts "Stat error"
     end
@@ -189,6 +230,7 @@ class Npc
     @con = @player_stats[:con]
     @dex = @player_stats[:dex]
     @int = @player_stats[:int]
+    applyBuffs(false)
     # puts "#{@str}"
     # puts "#{@dex}"
     # puts "#{@con}"
@@ -205,8 +247,6 @@ class Npc
   end
 end
 class Character < Npc
-  attr_reader :name
-
   #1
   def castSpell(targets)
     clear
@@ -215,25 +255,25 @@ class Character < Npc
       #3
       loop do
         puts "Who do you want to cast a spell at?"
-        selection = targets.listEnemies()
+        list = targets.listEnemies()
         #Only takes integer inputs
         target = Integer(gets) rescue nil
         #4
         if (target.is_a? Integer) == true
           #5
-          if selection[target].nil? == true
+          if list[target].nil? == true
             clear
             puts "Try again"
           else
             #6
-            if selection[target].health > 0
+            if list[target].health > 0
               clear
-              magicAttack(selection[target])
+              magicAttack(list[target])
               break
             else
-              #If your selection within the encounter has zero health then it dies
+              #If your list within the encounter has zero health then it dies
               #The encounter class has removeEnemy method and targets is the encounter
-              targets.removeEnemy(selection[target])
+              targets.removeEnemy(list[target])
               giveExp(10)
               break
               end#6
@@ -248,14 +288,284 @@ class Character < Npc
 
   def addItem(amount,type,mag)
     amount.times do
-      @items << Item.new("item",type,mag)
+      @inventory << Item.new("item",type,mag)
     end
   end
+
+  def generateLoot(quant,type)
+    potion_type = ["heal","str","dex","con","int"]
+    slot_select = ["head","ring","chest","hands","legs","feet"]
+
+    if type == "potion"
+      quant.times do
+        @loot << Item.new("item",potion_type.sample,1)
+      end
+    elsif type == "armor"
+      quant.times do
+        @loot << Equipment.new(slot_select.sample,"equipment",1)
+      end
+    else
+      puts "Some error"
+    end
+  end
+
+  def takeLoot
+    loop do
+      listLoot
+      breakLoop = false
+      choice = Integer(gets) rescue nil
+      if (choice.is_a? Integer) == true
+        #5
+        if @loot[choice].nil? == true
+          clear
+          puts "Try again"
+        elsif @loot[choice].name.downcase.include? "potion"
+          clear
+          @inventory << @loot[choice]
+          puts "Added #{@loot[choice].name} to inventory"
+          break
+        else
+          #check equipment
+          clear
+          loop do
+          if @loot[choice].name.downcase.include? "helm"
+            if @armor[:head].length == 0
+              puts "#{@name} equipped #{@loot[choice].name}"
+              @armor[:head].clear
+              @armor[:head] << @loot[choice]
+              breakLoop = true
+              break
+            elsif @armor[:head].length >= 0
+              if switchEquipment(@armor[:head][0],@loot[choice]) == true
+                @armor[:head].clear
+                @armor[:head] << @loot[choice]
+                puts "#{@name} equipped #{@loot[choice].name}"
+                breakLoop = true
+                break
+              else
+                puts "Item not equipped"
+                break
+              end
+            end
+          elsif @loot[choice].name.downcase.include? "ring"
+            if @armor[:ring].length == 0
+              puts "#{@name} equipped #{@loot[choice].name}"
+              @armor[:ring].clear
+              @armor[:ring] << @loot[choice]
+              breakLoop = true
+              break
+            elsif @armor[:ring].length >= 0
+              if switchEquipment(@armor[:ring][0],@loot[choice]) == true
+                @armor[:ring].clear
+                @armor[:ring] << @loot[choice]
+                puts "#{@name} equipped #{@loot[choice].name}"
+                breakLoop = true
+                break
+              else
+                puts "Item not equipped"
+                break
+              end
+            end
+          elsif @loot[choice].name.downcase.include? "cuirass"
+          if @armor[:chest].length == 0
+            puts "#{@name} equipped #{@loot[choice].name}"
+            @armor[:chest].clear
+            @armor[:chest] << @loot[choice]
+            breakLoop = true
+            break
+          elsif @armor[:chest].length >= 0
+            if switchEquipment(@armor[:chest][0],@loot[choice]) == true
+              @armor[:chest].clear
+              @armor[:chest] << @loot[choice]
+              puts "#{@name} equipped #{@loot[choice].name}"
+              breakLoop = true
+              break
+            else
+              puts "Item not equipped"
+              break
+            end
+          end
+          elsif @loot[choice].name.downcase.include? "gauntlets"
+          if @armor[:hands].length == 0
+            puts "#{@name} equipped #{@loot[choice].name}"
+            @armor[:hands].clear
+            @armor[:hands] << @loot[choice]
+            breakLoop = true
+            break
+          elsif @armor[:hands].length >= 0
+            if switchEquipment(@armor[:hands][0],armor) == true
+              @armor[:hands].clear
+              @armor[:hands] << @loot[choice]
+              puts "#{@name} equipped #{@loot[choice].name}"
+              breakLoop = true
+              break
+            else
+              puts "Item not equipped"
+              break
+            end
+          end
+          elsif @loot[choice].name.downcase.include? "greaves"
+          if @armor[:legs].length == 0
+            puts "#{@name} equipped #{@loot[choice].name}"
+            @armor[:legs] << @loot[choice]
+            breakLoop = true
+            break
+          elsif @armor[:legs].length >= 0
+            if switchEquipment(@armor[:legs][0],@loot[choice]) == true
+              @armor[:legs].clear
+              @armor[:legs] << @loot[choice]
+              breakLoop = true
+              break
+              puts "#{@name} equipped #{@loot[choice].name}"
+            else
+              puts "Item not equipped"
+              break
+            end
+          end
+          elsif @loot[choice].name.downcase.include? "boots"
+            if @armor[:feet].length == 0
+              puts "#{@name} equipped #{@loot[choice].name}"
+              @armor[:feet] << @loot[choice]
+              breakLoop = true
+              break
+            elsif @armor[:feet].length >= 0
+              if switchEquipment(@armor[:feet][0],@loot[choice]) == true
+                @armor[:feet].clear
+                @armor[:feet] << @loot[choice]
+                puts "#{@name} equipped #{@loot[choice].name}"
+                breakLoop = true
+                break
+              else
+                puts "Item not equipped"
+                break
+              end
+            end
+          end
+        end
+      end
+    end
+    break if breakLoop
+    end
+    @loot.clear
+  end
+
+  def listLoot
+    puts "Choose ONE item to loot, choose wisely"
+    @loot.each_with_index do |i, c|
+        puts "#{c}. #{i.name}"
+    end
+  end
+
+  def equipArmor(armor)
+    if armor.name.downcase.include? "helm"
+      if @armor[:head].length == 0
+        puts "#{@name} equipped #{armor.name}"
+        @armor[:head].clear
+        @armor[:head] << armor
+      elsif @armor[:head].length >= 0
+        if switchEquipment(@armor[:head][0],armor) == true
+          @armor[:head].clear
+          @armor[:head] << armor
+          puts "#{@name} equipped #{armor.name}"
+        else
+          puts "Item not equipped"
+        end
+      end
+    elsif armor.name.downcase.include? "ring"
+      if @armor[:ring].length == 0
+        puts "#{@name} equipped #{armor.name}"
+        @armor[:ring].clear
+        @armor[:ring] << armor
+      elsif @armor[:ring].length >= 0
+        if switchEquipment(@armor[:ring][0],armor) == true
+          @armor[:ring].clear
+          @armor[:ring] << armor
+          puts "#{@name} equipped #{armor.name}"
+        else
+          puts "Item not equipped"
+        end
+      end
+    elsif armor.name.downcase.include? "cuirass"
+    if @armor[:chest].length == 0
+      puts "#{@name} equipped #{armor.name}"
+      @armor[:chest].clear
+      @armor[:chest] << armor
+    elsif @armor[:chest].length >= 0
+      if switchEquipment(@armor[:chest][0],armor) == true
+        @armor[:chest].clear
+        @armor[:chest] << armor
+        puts "#{@name} equipped #{armor.name}"
+      else
+        puts "Item not equipped"
+      end
+    end
+    elsif armor.name.downcase.include? "gauntlets"
+    if @armor[:hands].length == 0
+      puts "#{@name} equipped #{armor.name}"
+      @armor[:hands].clear
+      @armor[:hands] << armor
+    elsif @armor[:hands].length >= 0
+      if switchEquipment(@armor[:hands][0],armor) == true
+        @armor[:hands].clear
+        @armor[:hands] << armor
+        puts "#{@name} equipped #{armor.name}"
+      else
+        puts "Item not equipped"
+      end
+    end
+    elsif armor.name.downcase.include? "greaves"
+    if @armor[:legs].length == 0
+      puts "#{@name} equipped #{armor.name}"
+      @armor[:legs] << armor
+    elsif @armor[:legs].length >= 0
+      if switchEquipment(@armor[:legs][0],armor) == true
+        @armor[:legs].clear
+        @armor[:legs] << armor
+        puts "#{@name} equipped #{armor.name}"
+      else
+        puts "Item not equipped"
+      end
+    end
+    elsif armor.name.downcase.include? "boots"
+      if @armor[:feet].length == 0
+        puts "#{@name} equipped #{armor.name}"
+        @armor[:feet] << armor
+      elsif @armor[:feet].length >= 0
+        if switchEquipment(@armor[:feet][0],armor) == true
+          @armor[:feet].clear
+          @armor[:feet] << armor
+          puts "#{@name} equipped #{armor.name}"
+        else
+          puts "Item not equipped"
+        end
+      end
+    end
+  end
+
+  def switchEquipment(current,new1)
+    loop do
+      puts "You have the #{current.name}, equip #{new1.name} instead?"
+      puts "1.Yes 2.No"
+      choice = gets.chomp.to_i
+      if choice == 1
+        #Return exits function
+        #breaks only exit loops
+        return true
+      elsif choice == 2
+        return false
+      else
+        clear
+        puts "Try again"
+      end
+    end
+  end
+
   def removeItem(item)
-    @items.slice!(@items.index(item))
+    @inventory.slice!(@inventory.index(item))
   end
 
   def itemEffect(item)
+    clear
     if item.typeCheck == "heal"
       healDamage(item.magSet)
     else
@@ -268,35 +578,71 @@ class Character < Npc
     loop do
       clear
       puts "What item do you want to use?"
-      @items.each_with_index do |i, c|
+      @inventory.each_with_index do |i, c|
         puts "#{c}. #{i.name}"
       end
       choice = Integer(gets) rescue nil
       #3
       if (choice.is_a? Integer) == true
         #4
-        if @items[choice].nil? == true
+        if @inventory[choice].nil? == true
           clear
           puts "Try again"
         else
-          itemEffect(@items[choice])
-          removeItem(@items[choice])
+          itemEffect(@inventory[choice])
+          removeItem(@inventory[choice])
           break
         end#4
       end#3
     end#2
   end#1
 
+  def giveExp(amount)
+    $experience += amount
+  end
+
   def levelUp
     if $experience  >= (@level * 100)
-      @level += 1
-      $experience = 0
+      @level += ($experience / 100)
+      @skill_points += ($experience / 100)
+      $experience -= (@level * 100)
       puts "Level up! You are now level #{@level}"
+
+      until @skill_points == 0
+        choice = 0
+        clear
+        resetStats
+        puts "You have #{@skill_points} skill points, what skill do you want to upgrade?"
+        puts "1.Strength:#{@str}  2.Constitution:#{@con}  3.Dexterity:#{@dex}  4.Intelligence:#{@int}"
+        choice = Integer(gets) rescue nil
+
+        if (choice.is_a? Integer) == true
+          if choice == 1
+            clear
+            increaseStat("str",1)
+            @skill_points -= 1
+          elsif choice == 2
+            clear
+            increaseStat("con",1)
+            @skill_points -= 1
+          elsif choice == 3
+            clear
+            increaseStat("dex",1)
+            @skill_points -= 1
+          elsif choice == 4
+            clear
+            increaseStat("int",1)
+            @skill_points -= 1
+          else
+            puts "Try again"
+          end
+        end
+      end
     end
   end
 
   def noItems
-    if @items.empty? == true
+    if @inventory.empty? == true
       true
     else
       false
@@ -305,6 +651,7 @@ class Character < Npc
 end
 class Encounter
   attr_reader :name
+  attr_accessor :variable
 
   def initialize(name)
     @name = name
@@ -339,6 +686,10 @@ class Encounter
     end
   end
 
+  def howMany
+    @enemies.length
+  end
+
   def allDead
     if @enemies.empty? == true
       true
@@ -364,9 +715,19 @@ class Item
   attr_accessor :variable
 
   def initialize(name,type,magnitude)
+
+    randomRoller = rand(1..100)
+    if randomRoller <= 70
+      magnitude = 1
+    elsif randomRoller >= 71 && randomRoller < 92
+      magnitude = 2
+    else
+      magnitude = 3
+    end
+
     @name = name
     @type = type
-    @magnitude = magnitude
+    @magnitude = magnitude.to_i
 
     if type == "heal" && magnitude == 1
       @name = "Lesser health potion"
@@ -378,33 +739,33 @@ class Item
 
     if type == "str" && magnitude == 1
       @name = "Lesser potion of strength"
-    elsif type == "str" && magnitude == 2
+      elsif type == "str" && magnitude == 2
       @name = "Potion of strength"
-    elsif type == "str" && magnitude == 3
+      elsif type == "str" && magnitude == 3
       @name = "Greater potion of strength"
     end
 
     if type == "con" && magnitude == 1
       @name = "Lesser potion of constitution"
-    elsif type == "con" && magnitude == 2
+      elsif type == "con" && magnitude == 2
       @name = "Potion of constitution"
-    elsif type == "con" && magnitude == 3
+      elsif type == "con" && magnitude == 3
       @name = "Greater potion of constitution"
     end
 
     if type == "dex" && magnitude == 1
       @name = "Lesser potion of dexterity"
-    elsif type == "dex" && magnitude == 2
+      elsif type == "dex" && magnitude == 2
       @name = "Potion of dexterity"
-    elsif type == "dex" && magnitude == 3
+      elsif type == "dex" && magnitude == 3
       @name = "Greater potion of dexterity"
     end
 
     if type == "int" && magnitude == 1
       @name = "Lesser potion of intelligence"
-    elsif type == "int" && magnitude == 2
+      elsif type == "int" && magnitude == 2
       @name = "Potion of intelligence"
-    elsif type == "int" && magnitude == 3
+      elsif type == "int" && magnitude == 3
       @name = "Greater potion of intelligence"
     end
   end
@@ -423,14 +784,139 @@ class Item
     end
   end
 end
+class Equipment
+  attr_reader :name
+  attr_accessor :variable
+
+  def initialize(name,type,lvl)
+    randomRoller = rand(1..100)
+    if randomRoller <= 50
+      powerLvl = 1
+    elsif randomRoller >= 51 && randomRoller < 75
+      powerLvl = 2
+    elsif randomRoller >= 75 && randomRoller < 85
+      powerLvl = 4
+    elsif randomRoller >= 85 && randomRoller < 92
+      powerLvl = 6
+    elsif randomRoller >= 92 && randomRoller < 97
+      powerLvl = 8
+    elsif randomRoller >= 97
+      powerLvl = 10
+    end
+    enchantment = ["of Strength","of Dexterity","of Constitution","of Intelligence"]
+
+    @name = name
+    @type = type
+    @lvl = powerLvl
+
+    if name == "head"
+      mod = enchantment.sample
+      @lvl = powerLvl.to_i
+      @name = "Helm " + mod + " " + powerLvl.to_s
+
+      if mod.include? "Strength"
+        @type = "str"
+        elsif mod.include? "Dexterity"
+        @type = "dex"
+        elsif mod.include? "Constitution"
+        @type = "con"
+        elsif mod.include? "Intelligence"
+        @type = "int"
+      end
+
+    elsif name == "ring"
+      mod = enchantment.sample
+      @lvl = powerLvl
+      @name = "Ring " + mod + " " + powerLvl.to_s
+
+      if mod.include? "Strength"
+        @type = "str"
+        elsif mod.include? "Dexterity"
+        @type = "dex"
+        elsif mod.include? "Constitution"
+        @type = "con"
+        elsif mod.include? "Intelligence"
+        @type = "int"
+      end
+
+    elsif name == "chest"
+      mod = enchantment.sample
+      @lvl = powerLvl
+      @name = "Cuirass " + mod + " " + powerLvl.to_s
+
+      if mod.include? "Strength"
+        @type = "str"
+        elsif mod.include? "Dexterity"
+        @type = "dex"
+        elsif mod.include? "Constitution"
+        @type = "con"
+        elsif mod.include? "Intelligence"
+        @type = "int"
+      end
+
+    elsif name == "hands"
+      mod = enchantment.sample
+      @lvl = powerLvl
+      @name = "Gauntlets " + mod + " " + powerLvl.to_s
+
+      if mod.include? "Strength"
+        @type = "str"
+        elsif mod.include? "Dexterity"
+          @type = "dex"
+        elsif mod.include? "Constitution"
+          @type = "con"
+        elsif mod.include? "Intelligence"
+        @type = "int"
+      end
+
+    elsif name == "legs"
+      mod = enchantment.sample
+      @lvl = powerLvl
+      @name = "Greaves " + mod + " " + powerLvl.to_s
+
+      if mod.include? "Strength"
+        @type = "str"
+        elsif mod.include? "Dexterity"
+        @type = "dex"
+        elsif mod.include? "Constitution"
+        @type = "con"
+        elsif mod.include? "Intelligence"
+        @type = "int"
+      end
+
+    elsif name == "feet"
+      mod = enchantment.sample
+      @lvl = powerLvl
+      @name = "Boots " + mod + " " + powerLvl.to_s
+
+      if mod.include? "Strength"
+        @type = "str"
+        elsif mod.include? "Dexterity"
+        @type = "dex"
+        elsif mod.include? "Constitution"
+        @type = "con"
+        elsif mod.include? "Intelligence"
+        @type = "int"
+      end
+    end
+  end
+
+  def typeCheck
+    @type
+  end
+end
+
 #1
 def combat(player,enemies)
+  player.generateLoot(enemies.howMany,"potion")
+  player.generateLoot(enemies.howMany,"armor")
+  player.resetStats
   puts "You are fighting #{enemies.name}"
   player_turn = true
   #2
   loop do
     if enemies.allDead == true
-      puts "You win"
+
       break
     else
     #3
@@ -458,9 +944,14 @@ def combat(player,enemies)
           puts "Choose a valid option"
         end #5
       elsif player_turn == false
+        enemies.removeDead
         #Enemy turn
         puts
-        puts "Enemy turn"
+        if enemies.allDead == false
+          puts "Enemy turn"
+        else
+          break
+        end
         puts
         enemies.enemyAttack(player)
         player_turn = true
@@ -471,8 +962,9 @@ def combat(player,enemies)
     end
     end #3
   end #2
-  player.levelUp
   player.resetStats
+  player.levelUp
+  player.takeLoot
 end #1
 
 clear
@@ -480,49 +972,29 @@ mage = Character.new("Mage","Human")
 
 enc1 = Encounter.new("Group of Iguani")
 enc2 = Encounter.new("Group of Dwarves")
+enc3 = Encounter.new("Group of asdsad")
 
 #parameters are (amount,racename)
 enc1.addEnemy(1,"Iguani")
-enc1.addEnemy(1,"Dwarf")
-enc1.addEnemy(1,"Elf")
+# enc1.addEnemy(1,"Dwarf")
+enc1.addEnemy(3,"Elf")
 # enc1.addEnemy(1,"Human")
 
-enc2.addEnemy(2,"Dwarf")
+enc2.addEnemy(4,"Iguani")
 
-mage.addItem(6,"heal",3)
-mage.addItem(2,"str",3)
-mage.addItem(2,"con",3)
-mage.addItem(2,"dex",3)
-mage.addItem(2,"int",3)
+enc3.addEnemy(3,"Iguani")
 
-
-# mage.addItem(int_pot1)
-# mage.addItem(int_pot1)
-# mage.addItem(dex_pot1)
-# mage.addItem(con_pot1)
-# mage.addItem(str_pot1)
-# mage.addItem(health_pot2)
-# mage.addItem(health_pot3)
+mage.addItem(1,"heal",1)
+mage.addItem(1,"str",1)
+mage.addItem(1,"con",1)
+mage.addItem(1,"dex",1)
+mage.addItem(4,"int",1)
 
 
 
+mage.giveExp(300)
 combat(mage,enc1)
-combat(mage,enc2)
 
-# warrior1 = Character.new("warrior1","Dwarf",50,45)
-# warrior1.about
-# warrior1.healDamage(3)
-# warrior1.about
-# warrior1.healDamage(7)
-# warrior1.about
-# james = Npc.new("James","Orc",50,50)
-# drew = Npc.new("Drew","Human",40,40)
-#
-# james.about
-# drew.about
-#
-# james.takeDamage(10)
-# james.about
-# james.takeDamage(30)
-# james.about
-# james.takeDamage(30)
+mage.giveExp(600)
+combat(mage,enc2)
+combat(mage,enc2)
